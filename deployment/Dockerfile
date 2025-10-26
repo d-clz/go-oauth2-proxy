@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Token Gateway - Production Ready
 
 # Build stage - using Go 1.25 to match your local environment
-FROM golang:1.25-alpine3.20 AS builder
+FROM golang:1.25-alpine3.22 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 RUN test -f token-gateway && chmod +x token-gateway
 
 # Runtime stage - using latest stable Alpine
-FROM alpine:3.20
+FROM alpine:3.22
 
 # Install runtime dependencies and apply security updates
 RUN apk --no-cache upgrade && \
