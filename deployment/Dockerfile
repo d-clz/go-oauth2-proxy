@@ -10,14 +10,16 @@ WORKDIR /build
 
 # Copy go mod files
 COPY go.mod ./
-RUN go mod download && go mod verify
 
-# Copy source code
-COPY cmd/ cmd/
-COPY internal/ internal/
+# Generate go.sum and download dependencies
+RUN go mod download && go mod tidy
 
-# Build binary
+# Copy all source code
+COPY . .
+
+# Build binary with verbose output
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -v \
     -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
     -o token-gateway \
