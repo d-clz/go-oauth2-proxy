@@ -8,16 +8,16 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
-# Copy go mod files
+# Copy go mod files and download dependencies
 COPY go.mod ./
-RUN go mod download && go mod verify
+RUN go mod download
 
-# Copy source code
-COPY cmd/ cmd/
-COPY internal/ internal/
+# Copy all source code
+COPY . .
 
-# Build binary
+# Build binary with verbose output
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -v \
     -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
     -o token-gateway \
