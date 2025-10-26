@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Construct Artifacts for new Release
 
 on:
   push:
@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      security-events: write
 
     steps:
       - name: Checkout repository
@@ -48,6 +49,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
+        id: docker_build
         uses: docker/build-push-action@v5
         with:
           context: ./src
@@ -59,12 +61,91 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      - name: Get primary image tag for scanning
+        id: image_tag
+        run: |
+          # Get the first tag from the list for scanning
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          echo "tag=${FIRST_TAG}" >> $GITHUB_OUTPUT
+          echo "Scanning image: ${FIRST_TAG}"
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.image_tag.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (JSON format)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.image_tag.outputs.tag }}
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Run Trivy vulnerability scanner (Table format)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.image_tag.outputs.tag }}
+          format: 'table'
+          output: 'trivy-results.txt'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Generate vulnerability summary
+        if: always()
+        run: |
+          echo "### 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scanned Image:** \`${{ steps.image_tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f trivy-results.json ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results.json)
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results.json)
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' trivy-results.json)
+            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' trivy-results.json)
+          
+            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 High | $HIGH |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟡 Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔵 Low | $LOW |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          
+            if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+              echo "⚠️ **Warning:** Critical or High severity vulnerabilities detected!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ **No Critical or High severity vulnerabilities detected**" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Scan results not available" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details>" >> $GITHUB_STEP_SUMMARY
+          echo "<summary>View detailed scan results</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat trivy-results.txt || echo "Scan results not available"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
       - name: Generate artifact summary
         run: |
           echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Repository:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.docker_build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -76,15 +157,104 @@ jobs:
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-      - name: Update release with Docker image info
+      - name: Check for critical vulnerabilities
+        if: always()
+        run: |
+          if [ -f trivy-results.json ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results.json)
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results.json)
+          
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "::warning::Found $CRITICAL critical vulnerabilities"
+            fi
+          
+            if [ "$HIGH" -gt 0 ]; then
+              echo "::warning::Found $HIGH high severity vulnerabilities"
+            fi
+          
+            # Uncomment below to fail the build if critical vulnerabilities are found
+            # if [ "$CRITICAL" -gt 0 ]; then
+            #   echo "::error::Build failed due to critical vulnerabilities"
+            #   exit 1
+            # fi
+          fi
+
+      - name: Upload scan results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: |
+            trivy-results.json
+            trivy-results.txt
+            trivy-results.sarif
+          retention-days: 90
+
+      - name: Update release with Docker image and scan info
         if: github.event_name == 'release'
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const tags = `${{ steps.meta.outputs.tags }}`.split('\n');
             const version = tags.find(tag => tag.match(/v?\d+\.\d+\.\d+$/)) || tags[0];
+            const digest = `${{ steps.docker_build.outputs.digest }}`;
 
-            const body = `## Docker Image
+            // Read scan results
+            let scanResults = '';
+            let vulnerabilitySummary = '';
+            
+            try {
+              const scanData = JSON.parse(fs.readFileSync('trivy-results.json', 'utf8'));
+              const scanText = fs.readFileSync('trivy-results.txt', 'utf8');
+            
+              // Count vulnerabilities by severity
+              let critical = 0, high = 0, medium = 0, low = 0;
+            
+              if (scanData.Results) {
+                scanData.Results.forEach(result => {
+                  if (result.Vulnerabilities) {
+                    result.Vulnerabilities.forEach(vuln => {
+                      switch(vuln.Severity) {
+                        case 'CRITICAL': critical++; break;
+                        case 'HIGH': high++; break;
+                        case 'MEDIUM': medium++; break;
+                        case 'LOW': low++; break;
+                      }
+                    });
+                  }
+                });
+              }
+            
+              vulnerabilitySummary = `
+            ### 🔒 Security Scan Results
+
+            | Severity | Count |
+            |----------|-------|
+            | 🔴 Critical | ${critical} |
+            | 🟠 High | ${high} |
+            | 🟡 Medium | ${medium} |
+            | 🔵 Low | ${low} |
+
+            ${critical > 0 || high > 0 ? '⚠️ **Warning:** Critical or High severity vulnerabilities detected!' : '✅ **No Critical or High severity vulnerabilities detected**'}
+            `;
+            
+              scanResults = `
+            <details>
+            <summary>📋 Click to view detailed vulnerability scan report</summary>
+
+            \`\`\`
+            ${scanText}
+            \`\`\`
+
+            </details>
+            `;
+            } catch (error) {
+              console.log('Could not read scan results:', error.message);
+              scanResults = '\n_Vulnerability scan results not available_\n';
+            }
+
+            const body = `## 🐳 Docker Image
 
             This release is available as a Docker image:
 
@@ -92,10 +262,12 @@ jobs:
             docker pull ${version}
             \`\`\`
 
-            ### All available tags:
+            **Image Digest:** \`${digest}\`
+
+            ### 📦 All available tags:
             ${tags.map(tag => `- \`${tag}\``).join('\n')}
 
-            ### Usage:
+            ### 🚀 Usage:
             \`\`\`bash
             docker run -p 8080:8080 \\
               -v /path/to/config.yaml:/app/config.yaml \\
@@ -103,6 +275,14 @@ jobs:
               -e GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json \\
               ${version}
             \`\`\`
+
+            ${vulnerabilitySummary}
+
+            ${scanResults}
+
+            ---
+            *Image built on: ${new Date().toISOString()}*
+            *Scanned with: [Trivy](https://github.com/aquasecurity/trivy)*
             `;
 
             // Get the current release
@@ -119,3 +299,5 @@ jobs:
               release_id: release.id,
               body: release.body + '\n\n' + body
             });
+
+            console.log('Release updated successfully with Docker image and scan information');
