@@ -9,8 +9,8 @@ RUN apk add --no-cache git ca-certificates
 WORKDIR /build
 
 # Copy go mod files
-COPY go.mod go.sum ./
-RUN go mod download
+COPY go.mod ./
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY cmd/ cmd/
@@ -34,8 +34,8 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/token-gateway .
 
-# Copy default config (can be overridden)
-COPY config.yaml .
+# Copy example config (can be overridden at runtime)
+COPY config.example.yaml ./config.yaml
 
 # Create non-root user
 RUN addgroup -g 1000 gateway && \
