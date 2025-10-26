@@ -17,11 +17,12 @@ type Config struct {
 
 // ServerConfig holds server settings
 type ServerConfig struct {
-	Address      string `yaml:"address"`
-	Port         int    `yaml:"port"`
-	ReadTimeout  int    `yaml:"read_timeout"`   // seconds
-	WriteTimeout int    `yaml:"write_timeout"`  // seconds
-	IdleTimeout  int    `yaml:"idle_timeout"`   // seconds
+	Address      string   `yaml:"address"`
+	Port         int      `yaml:"port"`
+	ReadTimeout  int      `yaml:"read_timeout"`   // seconds
+	WriteTimeout int      `yaml:"write_timeout"`  // seconds
+	IdleTimeout  int      `yaml:"idle_timeout"`   // seconds
+	AllowedPaths []string `yaml:"allowed_paths"`  // allowed path patterns (e.g., /run_sse, /apps/*)
 }
 
 // UpstreamConfig defines an upstream service
