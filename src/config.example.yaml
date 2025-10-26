@@ -1,0 +1,32 @@
+# Token Gateway Configuration
+# This is an example configuration file for local development
+
+server:
+  address: "0.0.0.0"
+  port: 8080
+  read_timeout: 30      # seconds
+  write_timeout: 30     # seconds
+  idle_timeout: 120     # seconds
+
+  # Path filtering - only allow requests to these endpoints
+  # If empty or not specified, all paths are allowed
+  # Supports exact matches and wildcards (/* for one level, /** for all levels)
+  allowed_paths:
+    - /run_sse        # Exact match for /run_sse
+    - /apps/*         # Match /apps/ and all sub-paths (e.g., /apps/foo, /apps/bar/baz)
+
+upstreams:
+  # Production Cloud Run service
+  # Example: ebank service
+  - name: adk-cloud-agent-sit
+    url: https://your-proxy-url
+    audience: https://your-cloud-run-endpoint
+    timeout: 30
+
+logging:
+  level: info    # debug, info, warn, error
+  format: text   # text, json
+
+token:
+  refresh_before_expiry: 5  # minutes - refresh token 5 minutes before expiry
+  enable_cache: true
