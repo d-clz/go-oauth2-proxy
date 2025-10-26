@@ -1,0 +1,36 @@
+# Token Gateway Configuration
+# This is an example configuration file for local development
+
+server:
+  address: "0.0.0.0"
+  port: 8080
+  read_timeout: 30      # seconds
+  write_timeout: 30     # seconds
+  idle_timeout: 120     # seconds
+
+upstreams:
+  # Production Cloud Run service
+  - name: cloud-run-prod
+    url: https://your-proxy-endpoint.com
+    audience: https://your-service-xyz.run.app
+    timeout: 30
+
+  # Staging Cloud Run service
+  - name: cloud-run-staging
+    url: https://staging-proxy.com
+    audience: https://staging-xyz.run.app
+    timeout: 30
+
+  # Example: ebank service
+  - name: ebank-sit
+    url: https://your-proxy-endpoint.com
+    audience: https://ebank-hari-agent-sit-962941342599.asia-southeast1.run.app
+    timeout: 30
+
+logging:
+  level: info    # debug, info, warn, error
+  format: text   # text, json
+
+token:
+  refresh_before_expiry: 5  # minutes - refresh token 5 minutes before expiry
+  enable_cache: true
