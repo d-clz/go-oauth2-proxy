@@ -9,13 +9,16 @@ RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /build
 
 # Copy go mod files
-COPY go.mod go.sum ./
+COPY go.mod go.sum* ./
 
-# Download dependencies
-RUN go mod download && go mod verify
+# Download dependencies and regenerate go.sum if needed
+RUN go mod download && go mod tidy && go mod verify
 
 # Copy all source code
 COPY . .
+
+# Ensure go.sum is up to date with all imports
+RUN go mod tidy
 
 # Build binary with optimized flags
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
@@ -42,15 +45,14 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/token-gateway .
 
-# Copy configuration files
+# Copy configuration files (if they exist)
 COPY config.example.yaml ./config.yaml
 
 # Create non-root user with restricted permissions
 RUN addgroup -g 1000 gateway && \
     adduser -D -u 1000 -G gateway -s /sbin/nologin gateway && \
     chown -R gateway:gateway /app && \
-    chmod 500 /app/token-gateway && \
-    chmod 400 /app/config.yaml
+    chmod 500 /app/token-gateway
 
 # Switch to non-root user
 USER gateway
@@ -70,8 +72,8 @@ ENV CONFIG_PATH=/app/config.yaml \
 LABEL org.opencontainers.image.title="Token Gateway" \
       org.opencontainers.image.description="OAuth2 Token Gateway Service" \
       security.scan.enabled="true" \
-      security.base-image="alpine:3.20" \
-      security.golang-version="1.25"
+      security.base-image="alpine:3.22" \
+      security.golang-version="1.25.3"
 
 # Run the application
 ENTRYPOINT ["/app/token-gateway"]
