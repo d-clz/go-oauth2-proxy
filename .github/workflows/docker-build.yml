@@ -1,9 +1,7 @@
-name: Construct Artifacts for new Release
+name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*.*.*'
   release:
@@ -14,7 +12,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  crafting-scaning-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,10 +40,11 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix={{branch}}-
+            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=sha,format=short,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
