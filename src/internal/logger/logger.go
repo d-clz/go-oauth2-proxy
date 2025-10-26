@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ func format(v interface{}) string {
 	case error:
 		return val.Error()
 	default:
-		return log.Sprint(val)
+		return fmt.Sprint(val)
 	}
 }
 
