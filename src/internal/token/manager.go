@@ -9,7 +9,7 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 
-	"github.com/yourorg/token-gateway/internal/logger"
+	"go-oauth2-proxy/src/internal/logger"
 )
 
 // TokenState represents the current state of a token

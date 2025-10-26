@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourorg/token-gateway/internal/config"
-	"github.com/yourorg/token-gateway/internal/logger"
-	"github.com/yourorg/token-gateway/internal/token"
+	"go-oauth2-proxy/src/internal/config"
+	"go-oauth2-proxy/src/internal/logger"
+	"go-oauth2-proxy/src/internal/token"
 )
 
 // Server represents the proxy server

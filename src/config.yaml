@@ -22,9 +22,9 @@ upstreams:
     timeout: 30
 
   # Example: ebank service
-  - name: ebank-sit
-    url: https://your-proxy-endpoint.com
-    audience: https://ebank-hari-agent-sit-962941342599.asia-southeast1.run.app
+  - name: adk-cloud-agent-sit
+    url: https://ebank-half-agent-sit-962941342599.asia-southeast1.run.app
+    audience: https://ebank-half-agent-sit-962941342599.asia-southeast1.run.app
     timeout: 30
 
 logging:

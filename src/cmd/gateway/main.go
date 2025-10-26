@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/yourorg/token-gateway/internal/config"
-	"github.com/yourorg/token-gateway/internal/logger"
-	"github.com/yourorg/token-gateway/internal/proxy"
+	"go-oauth2-proxy/src/internal/config"
+	"go-oauth2-proxy/src/internal/logger"
+	"go-oauth2-proxy/src/internal/proxy"
 )
 
 func main() {
