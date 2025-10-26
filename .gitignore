@@ -41,6 +41,8 @@ service-account*.json
 # Local config
 config.local.yaml
 *.local.yaml
+deployment/config.yaml
+deployment/.env
 
 # Logs
 *.log

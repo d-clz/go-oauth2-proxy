@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  oauth2-proxy:
+    image: ghcr.io/d-clz/go-oauth2-proxy:latest
+    container_name: go-oauth2-proxy
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount configuration file
+      - ./deployment/config.yaml:/app/config.yaml:ro
+      # Mount GCP credentials file
+      - ./deployment/credentials.json:/app/credentials.json:ro
+    environment:
+      # Path to GCP service account credentials
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials.json
+      # Override config path if needed
+      CONFIG_PATH: /app/config.yaml
+    command:
+      - "-config"
+      - "/app/config.yaml"
+      - "-log-level"
+      - "info"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - proxy-network
+
+  # Example backend service (optional - for testing)
+  # Uncomment this section to test the proxy with a sample backend
+  # sample-backend:
+  #   image: nginx:alpine
+  #   container_name: sample-backend
+  #   ports:
+  #     - "9000:80"
+  #   networks:
+  #     - proxy-network
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+networks:
+  proxy-network:
+    driver: bridge

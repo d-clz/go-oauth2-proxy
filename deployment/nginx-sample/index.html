@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample Backend Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .info {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #e8f5e9;
+            padding: 15px;
+            border-left: 4px solid #4caf50;
+            margin: 20px 0;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sample Backend Service</h1>
+
+        <div class="success">
+            <strong>Success!</strong> This is a sample backend service running behind the OAuth2 proxy.
+        </div>
+
+        <div class="info">
+            <h3>Service Information</h3>
+            <ul>
+                <li><strong>Service:</strong> Sample Nginx Backend</li>
+                <li><strong>Port:</strong> 9000 (external) / 80 (internal)</li>
+                <li><strong>Purpose:</strong> Testing the OAuth2 proxy functionality</li>
+            </ul>
+        </div>
+
+        <h2>Testing the Proxy</h2>
+        <p>If you can see this page, the OAuth2 proxy is working correctly!</p>
+
+        <h3>API Endpoints</h3>
+        <ul>
+            <li><code>GET /</code> - This page</li>
+            <li><code>GET /api/test</code> - Test JSON response</li>
+            <li><code>GET /healthz</code> - Health check endpoint</li>
+        </ul>
+
+        <h3>Test Commands</h3>
+        <pre><code># Test proxy health
+curl http://localhost:8080/healthz
+
+# Test token info
+curl http://localhost:8080/token-info
+
+# Test proxied request
+curl http://localhost:8080/your-endpoint</code></pre>
+    </div>
+</body>
+</html>
