@@ -48,3 +48,8 @@ config.local.yaml
 # Build artifacts
 dist/
 build/
+.idea/
+genai4ebank-93905dbfed50.json
+src/config.yaml
+
+src/go.sum

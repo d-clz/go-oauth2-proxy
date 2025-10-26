@@ -189,6 +189,13 @@ func (s *Server) handleTokenInfo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
+	// Check if path is allowed (if filtering is enabled)
+	if !s.isPathAllowed(r.URL.Path) {
+		logger.Warn("Path not allowed", "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
 	// Determine upstream
 	upstream := s.determineUpstream(r)
 	if upstream == nil {
@@ -298,6 +305,46 @@ func (s *Server) determineUpstream(r *http.Request) *config.UpstreamConfig {
 	}
 
 	return nil
+}
+
+// isPathAllowed checks if the request path is allowed based on configured patterns
+func (s *Server) isPathAllowed(path string) bool {
+	// If no allowed paths configured, allow all
+	if len(s.config.Server.AllowedPaths) == 0 {
+		return true
+	}
+
+	// Check each allowed pattern
+	for _, pattern := range s.config.Server.AllowedPaths {
+		if matchPath(pattern, path) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// matchPath checks if a path matches a pattern
+// Supports exact matches and wildcard patterns (e.g., /apps/*)
+func matchPath(pattern, path string) bool {
+	// Exact match
+	if pattern == path {
+		return true
+	}
+
+	// Wildcard pattern (e.g., /apps/*)
+	if strings.HasSuffix(pattern, "/*") {
+		prefix := strings.TrimSuffix(pattern, "/*")
+		return strings.HasPrefix(path, prefix+"/") || path == prefix
+	}
+
+	// Wildcard pattern with ** (e.g., /apps/**)
+	if strings.HasSuffix(pattern, "/**") {
+		prefix := strings.TrimSuffix(pattern, "/**")
+		return strings.HasPrefix(path, prefix+"/") || path == prefix
+	}
+
+	return false
 }
 
 // Hop-by-hop headers to remove

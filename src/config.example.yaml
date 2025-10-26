@@ -8,23 +8,19 @@ server:
   write_timeout: 30     # seconds
   idle_timeout: 120     # seconds
 
+  # Path filtering - only allow requests to these endpoints
+  # If empty or not specified, all paths are allowed
+  # Supports exact matches and wildcards (/* for one level, /** for all levels)
+  allowed_paths:
+    - /run_sse        # Exact match for /run_sse
+    - /apps/*         # Match /apps/ and all sub-paths (e.g., /apps/foo, /apps/bar/baz)
+
 upstreams:
   # Production Cloud Run service
-  - name: cloud-run-prod
-    url: https://your-proxy-endpoint.com
-    audience: https://your-service-xyz.run.app
-    timeout: 30
-
-  # Staging Cloud Run service
-  - name: cloud-run-staging
-    url: https://staging-proxy.com
-    audience: https://staging-xyz.run.app
-    timeout: 30
-
   # Example: ebank service
   - name: adk-cloud-agent-sit
-    url: https://ebank-half-agent-sit-962941342599.asia-southeast1.run.app
-    audience: https://ebank-half-agent-sit-962941342599.asia-southeast1.run.app
+    url: https://your-proxy-url
+    audience: https://your-cloud-run-endpoint
     timeout: 30
 
 logging:
