@@ -31,6 +31,7 @@ type UpstreamConfig struct {
 	URL      string `yaml:"url"`
 	Audience string `yaml:"audience"`
 	Timeout  int    `yaml:"timeout"` // seconds
+	Host     string `yaml:"host"`
 }
 
 // LoggingConfig holds logging settings
