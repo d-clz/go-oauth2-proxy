@@ -57,6 +57,10 @@ type Manager struct {
 
 // NewManager creates a new token manager
 func NewManager(ctx context.Context, credsFile string, refreshBeforeMinutes int) *Manager {
+	logger.Debug("Creating new token manager",
+		"creds_file", credsFile,
+		"refresh_before_minutes", refreshBeforeMinutes)
+	
 	return &Manager{
 		cache:              make(map[string]*TokenEntry),
 		ctx:                ctx,
@@ -67,9 +71,12 @@ func NewManager(ctx context.Context, credsFile string, refreshBeforeMinutes int)
 
 // GetToken returns a valid token for the given audience
 func (m *Manager) GetToken(audience string) (string, error) {
+	logger.Debug("GetToken called", "audience", audience)
+	
 	m.cacheMu.Lock()
 	entry, exists := m.cache[audience]
 	if !exists {
+		logger.Debug("Token entry does not exist, creating new entry", "audience", audience)
 		// Create new entry
 		entry = &TokenEntry{
 			metadata: &TokenMetadata{
@@ -79,14 +86,25 @@ func (m *Manager) GetToken(audience string) (string, error) {
 			},
 		}
 		m.cache[audience] = entry
+	} else {
+		logger.Debug("Token entry exists", 
+			"audience", audience,
+			"state", entry.metadata.State,
+			"expires_at", entry.metadata.ExpiresAt.Format(time.RFC3339))
 	}
 	m.cacheMu.Unlock()
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
+	logger.Debug("Checking if token needs refresh",
+		"audience", audience,
+		"state", entry.metadata.State,
+		"has_token_source", entry.tokenSource != nil)
+
 	// Check if we need to refresh
 	if m.shouldRefresh(entry) {
+		logger.Debug("Token needs refresh", "audience", audience)
 		if err := m.refreshToken(entry, audience); err != nil {
 			entry.metadata.State = StateError
 			entry.metadata.ErrorCount++
@@ -97,16 +115,19 @@ func (m *Manager) GetToken(audience string) (string, error) {
 				"error_count", entry.metadata.ErrorCount)
 			return "", err
 		}
+	} else {
+		logger.Debug("Token does not need refresh", "audience", audience)
 	}
 
 	// Update last used
 	entry.metadata.LastUsed = time.Now()
 
-	logger.Debug("Token retrieved",
+	logger.Debug("Token retrieved successfully",
 		"audience", audience,
 		"state", entry.metadata.State,
 		"expires_in", time.Until(entry.metadata.ExpiresAt).String(),
-		"refresh_count", entry.metadata.RefreshCount)
+		"refresh_count", entry.metadata.RefreshCount,
+		"token_length", len(entry.metadata.Token))
 
 	return entry.metadata.Token, nil
 }
@@ -115,24 +136,44 @@ func (m *Manager) GetToken(audience string) (string, error) {
 func (m *Manager) shouldRefresh(entry *TokenEntry) bool {
 	meta := entry.metadata
 
+	logger.Debug("Evaluating shouldRefresh",
+		"audience", meta.Audience,
+		"state", meta.State,
+		"has_token_source", entry.tokenSource != nil,
+		"expires_at", meta.ExpiresAt.Format(time.RFC3339))
+
 	// New token - needs creation
 	if meta.State == StateNew {
+		logger.Debug("Token is new, needs creation", "audience", meta.Audience)
 		return true
 	}
 
 	// No token source - needs creation
 	if entry.tokenSource == nil {
+		logger.Debug("No token source, needs creation", "audience", meta.Audience)
 		return true
 	}
 
+	now := time.Now()
+	
 	// Token expired
-	if time.Now().After(meta.ExpiresAt) {
+	if now.After(meta.ExpiresAt) {
+		logger.Debug("Token expired",
+			"audience", meta.Audience,
+			"expired_at", meta.ExpiresAt.Format(time.RFC3339),
+			"now", now.Format(time.RFC3339))
 		meta.State = StateExpired
 		return true
 	}
 
 	// Token expiring soon
-	if time.Now().Add(m.refreshBeforeExpiry).After(meta.ExpiresAt) {
+	refreshThreshold := now.Add(m.refreshBeforeExpiry)
+	if refreshThreshold.After(meta.ExpiresAt) {
+		logger.Debug("Token expiring soon",
+			"audience", meta.Audience,
+			"expires_at", meta.ExpiresAt.Format(time.RFC3339),
+			"refresh_threshold", refreshThreshold.Format(time.RFC3339),
+			"expires_in", time.Until(meta.ExpiresAt).String())
 		if meta.State != StateExpiring {
 			logger.Info("Token expiring soon, will refresh",
 				"audience", meta.Audience,
@@ -142,6 +183,9 @@ func (m *Manager) shouldRefresh(entry *TokenEntry) bool {
 		return true
 	}
 
+	logger.Debug("Token is valid, no refresh needed",
+		"audience", meta.Audience,
+		"expires_in", time.Until(meta.ExpiresAt).String())
 	return false
 }
 
@@ -150,6 +194,13 @@ func (m *Manager) refreshToken(entry *TokenEntry, audience string) error {
 	meta := entry.metadata
 	startTime := time.Now()
 
+	logger.Debug("Starting refreshToken",
+		"audience", audience,
+		"state", meta.State,
+		"refresh_count", meta.RefreshCount,
+		"creds_file", m.credsFile,
+		"creds_file_empty", m.credsFile == "")
+
 	logger.Info("Refreshing token",
 		"audience", audience,
 		"state", meta.State,
@@ -157,20 +208,51 @@ func (m *Manager) refreshToken(entry *TokenEntry, audience string) error {
 
 	// Create token source if needed
 	if entry.tokenSource == nil {
-		ts, err := idtoken.NewTokenSource(m.ctx, audience,
-			idtoken.WithCredentialsFile(m.credsFile))
+		logger.Debug("Creating new token source",
+			"audience", audience,
+			"creds_file", m.credsFile)
+		
+		var ts oauth2.TokenSource
+		var err error
+		
+		if m.credsFile != "" {
+			logger.Debug("Using credentials file", "path", m.credsFile)
+			ts, err = idtoken.NewTokenSource(m.ctx, audience,
+				idtoken.WithCredentialsFile(m.credsFile))
+		} else {
+			logger.Debug("Using default credentials from GOOGLE_APPLICATION_CREDENTIALS env var")
+			ts, err = idtoken.NewTokenSource(m.ctx, audience)
+		}
+		
 		if err != nil {
+			logger.Error("Failed to create token source",
+				"audience", audience,
+				"error", err,
+				"creds_file", m.credsFile)
 			return fmt.Errorf("failed to create token source: %w", err)
 		}
 		entry.tokenSource = ts
-		logger.Debug("Token source created", "audience", audience)
+		logger.Debug("Token source created successfully", "audience", audience)
+	} else {
+		logger.Debug("Reusing existing token source", "audience", audience)
 	}
 
 	// Get token
+	logger.Debug("Calling tokenSource.Token()", "audience", audience)
 	token, err := entry.tokenSource.Token()
 	if err != nil {
+		logger.Error("Token() call failed",
+			"audience", audience,
+			"error", err,
+			"error_type", fmt.Sprintf("%T", err))
 		return fmt.Errorf("failed to get token: %w", err)
 	}
+	
+	logger.Debug("Token received from tokenSource",
+		"audience", audience,
+		"token_length", len(token.AccessToken),
+		"expires_at", token.Expiry.Format(time.RFC3339),
+		"valid_for", time.Until(token.Expiry).String())
 
 	// Update metadata
 	meta.Token = token.AccessToken
@@ -185,6 +267,10 @@ func (m *Manager) refreshToken(entry *TokenEntry, audience string) error {
 			"expires_at", token.Expiry.Format(time.RFC3339),
 			"valid_for", time.Until(token.Expiry).String(),
 			"duration", time.Since(startTime).String())
+		logger.Debug("Token details",
+			"audience", audience,
+			"token_prefix", token.AccessToken[:min(20, len(token.AccessToken))],
+			"token_length", len(token.AccessToken))
 	} else {
 		meta.State = StateRefreshed
 		logger.Info("Token refreshed",
@@ -200,11 +286,14 @@ func (m *Manager) refreshToken(entry *TokenEntry, audience string) error {
 
 // MarkRejected marks a token as rejected (e.g., 401/403 from upstream)
 func (m *Manager) MarkRejected(audience string) {
+	logger.Debug("MarkRejected called", "audience", audience)
+	
 	m.cacheMu.RLock()
 	entry, exists := m.cache[audience]
 	m.cacheMu.RUnlock()
 
 	if !exists {
+		logger.Debug("Token entry not found for MarkRejected", "audience", audience)
 		return
 	}
 
@@ -219,16 +308,20 @@ func (m *Manager) MarkRejected(audience string) {
 		"rejected_count", entry.metadata.RejectedCount)
 
 	// Force refresh on next request
+	logger.Debug("Clearing token source to force refresh", "audience", audience)
 	entry.tokenSource = nil
 }
 
 // GetMetadata returns metadata for a specific audience
 func (m *Manager) GetMetadata(audience string) *TokenMetadata {
+	logger.Debug("GetMetadata called", "audience", audience)
+	
 	m.cacheMu.RLock()
 	entry, exists := m.cache[audience]
 	m.cacheMu.RUnlock()
 
 	if !exists {
+		logger.Debug("No metadata found", "audience", audience)
 		return nil
 	}
 
@@ -237,11 +330,14 @@ func (m *Manager) GetMetadata(audience string) *TokenMetadata {
 
 	// Create a copy to avoid race conditions
 	meta := *entry.metadata
+	logger.Debug("Returning metadata", "audience", audience, "state", meta.State)
 	return &meta
 }
 
 // GetAllMetadata returns metadata for all cached tokens
 func (m *Manager) GetAllMetadata() map[string]*TokenMetadata {
+	logger.Debug("GetAllMetadata called")
+	
 	m.cacheMu.RLock()
 	defer m.cacheMu.RUnlock()
 
@@ -253,6 +349,7 @@ func (m *Manager) GetAllMetadata() map[string]*TokenMetadata {
 		result[audience] = &meta
 	}
 
+	logger.Debug("Returning all metadata", "count", len(result))
 	return result
 }
 
@@ -267,6 +364,8 @@ type Stats struct {
 }
 
 func (m *Manager) GetStats() Stats {
+	logger.Debug("GetStats called")
+	
 	m.cacheMu.RLock()
 	defer m.cacheMu.RUnlock()
 
@@ -298,5 +397,18 @@ func (m *Manager) GetStats() Stats {
 		entry.mu.RUnlock()
 	}
 
+	logger.Debug("Stats computed",
+		"total_cached", stats.TotalCached,
+		"total_refreshed", stats.TotalRefreshed,
+		"total_rejected", stats.TotalRejected,
+		"total_errors", stats.TotalErrors)
+
 	return stats
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
