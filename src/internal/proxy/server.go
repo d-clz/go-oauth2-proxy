@@ -238,7 +238,12 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 			req.URL.Scheme = targetURL.Scheme
 			req.URL.Host = targetURL.Host
 			req.URL.Path = singleJoiningSlash(targetURL.Path, req.URL.Path)
-			req.Host = targetURL.Host
+			if upstream.Host != "" {
+		        req.Host = upstream.Host
+		        logger.Debug("Setting custom Host header", "host", upstream.Host)
+		    } else {
+		        req.Host = targetURL.Host
+		    }
 
 			// Add authorization header
 			req.Header.Set("Authorization", "Bearer "+token)
